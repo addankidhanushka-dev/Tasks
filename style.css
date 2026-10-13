@@ -1,0 +1,472 @@
+/* ==================================================
+   1. GLOBAL STYLES
+   ================================================== */
+
+:root {
+  --ink: #17212f;
+  --muted: #667085;
+  --line: #dfe5ec;
+  --blue: #1769aa;
+  --green: #23834b;
+  --yellow: #e6a23c;
+  --orange: #e66b2e;
+  --red: #c62828;
+  --bg: #f4f7fb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-family: Inter, Arial, sans-serif;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--bg);
+}
+
+/* ==================================================
+   2. COMPACT TITLE CARD
+   ================================================== */
+
+.topbar {
+  position: absolute;
+  z-index: 1000;
+  top: 12px;
+  left: 16px;
+  max-width: calc(100vw - 32px);
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 20px rgba(16, 24, 40, 0.10);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 25px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.4px;
+}
+
+.demo-tag {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: #fff2d4;
+  color: #895000;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.subtitle {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* ==================================================
+   3. COMPACT SOIL-THICKNESS LEGEND
+   ================================================== */
+
+.legend {
+  position: absolute;
+  z-index: 1000;
+  bottom: 12px;
+  left: 16px;
+  width: 350px;
+  max-width: calc(100vw - 32px);
+  padding: 16px 18px;
+  border: 1px solid rgba(223, 229, 236, 0.8);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 20px rgba(16, 24, 40, 0.10);
+}
+
+.legend > strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.legend-dot {
+  display: inline-flex;
+  flex: 0 0 16px;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.thickness-green {
+  background: var(--green);
+}
+
+.thickness-yellow {
+  background: var(--yellow);
+}
+
+.thickness-orange {
+  background: var(--orange);
+}
+
+.thickness-red {
+  background: var(--red);
+}
+
+/* S marker in the legend */
+.station-blue {
+  background: var(--blue);
+  color: white;
+  border: 1px solid #0e4778;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.legend-divider {
+  height: 1px;
+  margin: 12px 0;
+  background: var(--line);
+}
+
+.legend-note {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+/* ==================================================
+   4. SOIL-THICKNESS-COLOURED SENSOR MARKER
+   ================================================== */
+
+.sensor-marker-wrapper {
+  border: none;
+  background: transparent;
+}
+
+.sensor-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 2px solid white;
+  outline: 2px solid rgba(23, 33, 47, 0.45);
+  border-radius: 50%;
+  color: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+/* ==================================================
+   5. LOADING AND STATUS MESSAGE
+   ================================================== */
+
+.map-message {
+  position: absolute;
+  z-index: 1100;
+  top: 50%;
+  left: 50%;
+  max-width: calc(100vw - 32px);
+  padding: 14px 20px;
+  transform: translate(-50%, -50%);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: white;
+  box-shadow: 0 5px 18px rgba(16, 24, 40, 0.12);
+  color: #243247;
+  font-size: 14px;
+  text-align: center;
+}
+
+.map-message.hidden {
+  display: none;
+}
+
+/* ==================================================
+   6. SENSOR POPUP
+   ================================================== */
+
+.sensor-popup {
+  min-width: 230px;
+  color: var(--ink);
+  font-family: Inter, Arial, sans-serif;
+}
+
+.popup-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+  font-size: 16px;
+}
+
+.simulated-badge {
+  display: inline-block;
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #fff2d4;
+  color: #895000;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.popup-subtitle {
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.popup-reading {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid #edf0f4;
+  font-size: 12px;
+}
+
+.reading-icon {
+  font-size: 14px;
+}
+
+.reading-name {
+  color: #475467;
+  line-height: 1.35;
+}
+
+.popup-reading strong {
+  color: var(--ink);
+  font-size: 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.soil-record {
+  margin-top: 3px;
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+}
+
+.popup-footer {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  color: #475467;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.live-dot {
+  flex: 0 0 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e6a23c;
+}
+
+.popup-updated {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.popup-disclaimer {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+/* ==================================================
+   7. LEAFLET CONTROLS
+   ================================================== */
+
+.leaflet-control-layers,
+.leaflet-control-scale-line {
+  border-color: var(--line) !important;
+  border-radius: 6px;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 12px;
+}
+
+.leaflet-popup-content {
+  margin: 12px;
+}
+
+/* ==================================================
+   8. MOBILE RESPONSIVENESS
+   ================================================== */
+
+@media (max-width: 600px) {
+  .topbar {
+    top: 10px;
+    left: 10px;
+    max-width: calc(100vw - 20px);
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .brand {
+    gap: 6px;
+    font-size: 20px;
+  }
+
+  .demo-tag {
+    padding: 4px 6px;
+    font-size: 9px;
+  }
+
+  .subtitle {
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .legend {
+    bottom: 10px;
+    left: 10px;
+    width: 300px;
+    max-width: calc(100vw - 20px);
+    padding: 12px 14px;
+    border-radius: 12px;
+  }
+
+  .legend > strong {
+    margin-bottom: 8px;
+    font-size: 15px;
+  }
+
+  .legend-item {
+    gap: 8px;
+    margin: 7px 0;
+    font-size: 12px;
+  }
+
+  .legend-dot {
+    flex-basis: 14px;
+    width: 14px;
+    height: 14px;
+  }
+
+  .legend-note {
+    font-size: 10px;
+  }
+
+  .legend-divider {
+    margin: 9px 0;
+  }
+
+  .map-message {
+    padding: 11px 14px;
+    font-size: 12px;
+  }
+}
+
+#analyzeRiskBtn {
+    position: fixed;
+    top: 100px;
+    right: 20px;
+    z-index: 2000;
+
+    padding: 12px 20px;
+    background-color: #1769aa;
+    color: white;
+
+    border: none;
+    border-radius: 8px;
+
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+/* When the mouse hovers over the button */
+#analyzeRiskBtn:hover {
+    background-color: #0e4778;
+}
+
+/* ==================================================
+   9. RISK ANALYSIS ADDITIONS
+   ================================================== */
+
+.hidden {
+  display: none !important;
+}
+
+#analyzeRiskBtn:disabled {
+  background-color: #7a9bb8;
+  cursor: wait;
+}
+
+/* Status / result text under the Analyze Risk button */
+#riskMessage {
+  position: fixed;
+  top: 150px;
+  right: 20px;
+  z-index: 2000;
+  max-width: 300px;
+  margin: 0;
+  padding: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 5px 20px rgba(16, 24, 40, 0.10);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.risk-row {
+  margin-bottom: 3px;
+  border-bottom: 1px solid var(--line);
+}
+
+@media (max-width: 600px) {
+  #riskMessage {
+    top: 140px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+    font-size: 12px;
+  }
+}

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SlopeGuard | Landslide Monitoring Map</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <!-- Full-screen map -->
+  <div id="map"></div>
+  
+  <!-- Compact title card -->
+  <header class="topbar">
+    <div class="brand">
+      <span>⛰️ SlopeGuard</span>
+      <span class="demo-tag">MVP SIMULATION</span>
+    </div>
+
+    <div class="subtitle">
+      Landslide monitoring · Interactive sensor map
+    </div>
+  </header>
+  <button id="analyzeRiskBtn">Analyze Risk</button>
+  <p id="riskMessage">Waiting for analysis...</p>
+  
+  <!-- Soil-thickness legend -->
+  <div class="legend">
+    <!-- Shown until Analyze Risk has been run -->
+    <div id="legendThickness">
+    <strong>Map legend — Soil thickness</strong>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-green"></span>
+      Below 0.5 m
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-yellow"></span>
+      0.5 m to below 1.0 m
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-orange"></span>
+      1.0 m to below 1.5 m
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-red"></span>
+      1.5 m or more
+    </div>
+    </div>
+
+    <!-- Shown after Analyze Risk: marker colour = predicted risk -->
+    <div id="legendRisk" class="hidden">
+    <strong>Map legend — Predicted landslide risk</strong>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-green"></span>
+      Low risk
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-yellow"></span>
+      Mid risk
+    </div>
+
+    <div class="legend-item">
+      <span class="legend-dot thickness-red"></span>
+      High risk
+    </div>
+    </div>
+
+    <div class="legend-divider"></div>
+
+    <div class="legend-item">
+      <span class="legend-dot station-blue">S</span>
+      S = Simulated sensor station
+    </div>
+
+    <div class="legend-note" id="legendNote">
+      Marker colour represents recorded soil thickness, not landslide
+      risk, until you click Analyze Risk. Sensor readings are simulated
+      and are not real measurements.
+    </div>
+  </div>
+
+  <!-- Loading and error message -->
+  <div class="map-message" id="mapMessage" role="status">
+    Loading map data...
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    "use strict";
+
+    // ==================================================
+    // 1. INITIALIZE MAP
+    // ==================================================
+
+    const map = L.map("map").setView([20, 0], 2);
+
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution:
+        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    L.control.scale({
+      metric: true,
+      imperial: false
+    }).addTo(map);
+
+    // One layer: each marker represents a soil sample
+    // and a simulated station at that coordinate.
+    const monitoringLayer = L.layerGroup().addTo(map);
+
+    const mapMessage = document.getElementById("mapMessage");
+    const sensorStations = [];
+
+    // ==================================================
+    // 2. HELPER FUNCTIONS
+    // ==================================================
+
+    function escapeHTML(value) {
+      return String(value).replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]);
+    }
+
+    function formatTime(date) {
+      return date.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit"
+      });
+    }
+
+    // Marker colours match the soil-thickness legend.
+    function thicknessColor(value) {
+      if (value < 0.5) return "#23834b";
+      if (value < 1.0) return "#e6a23c";
+      if (value < 1.5) return "#e66b2e";
+      return "#c62828";
+    }
+
+    // Marker colours for the model's output.
+    function riskColor(risk) {
+      if (risk === "Low Risk") return "#23834b";
+      if (risk === "Mid Risk") return "#e6a23c";
+      if (risk === "High Risk") return "#c62828";
+      return "#667085";
+    }
+
+    // ==================================================
+    // 3. SIMULATED SENSOR READINGS
+    // Demonstration values only; not real sensor data.
+    // ==================================================
+
+    function randomBetween(min, max, decimals = 1) {
+      const value = min + Math.random() * (max - min);
+      return Number(value.toFixed(decimals));
+    }
+
+    // The 12 model inputs for one station. Ranges follow the training
+    // data, so the model sees realistic values. Soil thickness is the
+    // recorded value from soil_thickness.csv when it is supplied.
+    function generateSensorReadings(recordedSoilThickness) {
+      return {
+        slope_profile_sample_number: randomBetween(0, 552, 0),
+        horizontal_profile_distance: randomBetween(0, 650, 2),
+        elevation: randomBetween(120, 860, 2),
+        relative_height: randomBetween(0, 325, 2),
+        slope: randomBetween(1.5, 67.5, 2),
+        soil_thickness: Number.isFinite(recordedSoilThickness)
+          ? recordedSoilThickness
+          : randomBetween(0.2, 2.1, 2),
+        profile_curvature: randomBetween(-5, 5, 4),
+        plan_curvature: randomBetween(-5, 5, 4),
+        twi: randomBetween(2, 24, 2),
+        slope_type: randomBetween(1, 2, 0),
+        relative_slope_position: randomBetween(0.1, 0.97, 4),
+        slope_profile_horizontal_length: randomBetween(70, 650, 2)
+      };
+    }
+
+    // The five readings shown in the popup (demo values only).
+    function generateDisplayReadings() {
+      return {
+        rainfall: randomBetween(0, 60, 1),
+        soilMoisture: randomBetween(20, 90, 1),
+        tilt: randomBetween(0, 0.5, 3),
+        soilThicknessEstimate: randomBetween(0.2, 2.5, 2),
+        waterIndex: randomBetween(0, 100, 1)
+      };
+    }
+
+    // ==================================================
+    // 4. COLOURED MARKER ICON
+    // The colour comes from recorded soil thickness.
+    // S identifies a simulated sensor station.
+    // ==================================================
+
+    function createSensorIcon(station) {
+      // Predicted risk colours the marker once it is known;
+      // before that, the recorded soil thickness does.
+      const color = station.risk
+        ? riskColor(station.risk)
+        : thicknessColor(station.recordedSoilThickness);
+
+      return L.divIcon({
+        className: "sensor-marker-wrapper",
+        html: `
+          <div class="sensor-marker"
+               style="background-color:${color}">
+            S
+          </div>
+        `,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14]
+      });
+    }
+
+    // ==================================================
+    // 5. POPUP CONTENT
+    // ==================================================
+
+    function sensorPopupHTML(station) {
+      const r = station.readings;
+
+      return `
+        <div class="sensor-popup">
+
+          <div class="popup-heading">
+            <strong>${escapeHTML(station.id)}</strong>
+            <span class="simulated-badge">SIMULATED</span>
+          </div>
+
+          <div class="popup-subtitle">
+            Monitoring station · Demo readings
+          </div>
+
+          <div class="popup-reading risk-row">
+            <span class="reading-icon">⚠️</span>
+            <span class="reading-name">Predicted risk</span>
+            <strong class="risk-value" style="color:${riskColor(station.risk)}">
+              ${station.risk ? escapeHTML(station.risk) : "Not analysed yet"}
+            </strong>
+          </div>
+
+          <div class="popup-reading">
+            <span class="reading-icon">🌧️</span>
+            <span class="reading-name">Rainfall rate</span>
+            <strong>${r.rainfall} mm/h</strong>
+          </div>
+
+          <div class="popup-reading">
+            <span class="reading-icon">💧</span>
+            <span class="reading-name">Soil moisture</span>
+            <strong>${r.soilMoisture}%</strong>
+          </div>
+
+          <div class="popup-reading">
+            <span class="reading-icon">📐</span>
+            <span class="reading-name">Tilt change</span>
+            <strong>${r.tilt.toFixed(3)}°</strong>
+          </div>
+
+          <div class="popup-reading">
+            <span class="reading-icon">〰️</span>
+            <span class="reading-name">Acoustic thickness estimate</span>
+            <strong>${r.soilThicknessEstimate.toFixed(2)} m</strong>
+          </div>
+
+          <div class="popup-reading">
+            <span class="reading-icon">🌊</span>
+            <span class="reading-name">Water index</span>
+            <strong>${r.waterIndex}%</strong>
+          </div>
+
+          <div class="popup-reading soil-record">
+            <span class="reading-icon">🌱</span>
+            <span class="reading-name">Recorded soil thickness</span>
+            <strong>${station.recordedSoilThickness.toFixed(2)} m</strong>
+          </div>
+
+          <div class="popup-footer">
+            <span class="live-dot"></span>
+            Random demo readings · Refreshed on every Analyze Risk
+          </div>
+
+          <div class="popup-updated">
+            Last updated: ${formatTime(station.updatedAt)}
+          </div>
+
+          <div class="popup-disclaimer">
+            Sensor values are simulated. Recorded soil thickness comes
+            from the CSV and does not change. The acoustic estimate and
+            water index are placeholders, not validated measurements.
+            Risk is predicted by the Python model from 12 simulated
+            inputs per station.
+          </div>
+
+        </div>
+      `;
+    }
+
+    // ==================================================
+    // 6. CREATE ONE MARKER PER LOCATION
+    // ==================================================
+
+    function addSensorStation(lat, lon, sampleNumber, thickness) {
+      const station = {
+        id: "SG-" + String(sampleNumber).padStart(2, "0"),
+        lat: lat,
+        lon: lon,
+        recordedSoilThickness: thickness,
+        features: generateSensorReadings(thickness), // 12 model inputs
+        readings: generateDisplayReadings(),         // 5 popup readings
+        risk: null,
+        updatedAt: new Date(),
+        marker: null,
+        popupOpen: false
+      };
+
+      const marker = L.marker([lat, lon], {
+        icon: createSensorIcon(station),
+        keyboard: true,
+        title:
+          "Sample " + sampleNumber +
+          " · Soil thickness: " + thickness.toFixed(2) + " m"
+      }).addTo(monitoringLayer);
+
+      station.marker = marker;
+
+      marker.bindPopup(sensorPopupHTML(station), {
+        maxWidth: 320,
+        minWidth: 250,
+        autoPan: true
+      });
+
+      marker.on("popupopen", () => {
+        station.popupOpen = true;
+      });
+
+      marker.on("popupclose", () => {
+        station.popupOpen = false;
+      });
+
+      sensorStations.push(station);
+    }
+
+    // ==================================================
+    // 7. LOAD SOIL-THICKNESS CSV
+    // ==================================================
+
+    const stationsReady = fetch("./soil_thickness.csv")
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(
+            "Could not load soil_thickness.csv. Check the file location."
+          );
+        }
+
+        return response.text();
+      })
+
+      .then(csv => {
+        const rows = csv.trim().split(/\r?\n/);
+
+        if (rows.length < 2) {
+          throw new Error("The CSV contains no data records.");
+        }
+
+        const headers = rows[0].split(",").map(h => h.trim());
+
+        const latIndex = headers.indexOf("latitude_N");
+        const lonIndex = headers.indexOf("longitude_E");
+        const sampleIndex = headers.indexOf("sample_number");
+        const thicknessIndex = headers.indexOf("soil_thickness_m");
+
+        if (
+          latIndex === -1 ||
+          lonIndex === -1 ||
+          sampleIndex === -1 ||
+          thicknessIndex === -1
+        ) {
+          throw new Error("Required CSV columns are missing.");
+        }
+
+        const dataRows = rows
+          .slice(1)
+          .filter(row => row.trim() !== "");
+
+        // Show at most 15 evenly spaced samples.
+        const pointCount = Math.min(15, dataRows.length);
+        const selectedRows = [];
+
+        for (let i = 0; i < pointCount; i++) {
+          const index = pointCount === 1
+            ? 0
+            : Math.round(
+                i * (dataRows.length - 1) / (pointCount - 1)
+              );
+
+          selectedRows.push(dataRows[index]);
+        }
+
+        const mapBounds = [];
+
+        selectedRows.forEach(row => {
+          const columns = row.split(",");
+
+          const sampleNumber = columns[sampleIndex]?.trim();
+          const lat = Number(columns[latIndex]);
+          const lon = Number(columns[lonIndex]);
+          const thickness = Number(columns[thicknessIndex]);
+
+          if (
+            !sampleNumber ||
+            !Number.isFinite(lat) ||
+            !Number.isFinite(lon) ||
+            !Number.isFinite(thickness) ||
+            lat < -90 ||
+            lat > 90 ||
+            lon < -180 ||
+            lon > 180 ||
+            thickness < 0
+          ) {
+            return;
+          }
+
+          // Marker colour is determined by the CSV thickness value.
+          addSensorStation(lat, lon, sampleNumber, thickness);
+
+          mapBounds.push([lat, lon]);
+        });
+
+        if (mapBounds.length > 0) {
+          map.fitBounds(mapBounds, {
+            paddingTopLeft: [25, 25],
+            paddingBottomRight: [25, 25],
+            maxZoom: 13
+          });
+
+          mapMessage.textContent =
+            `Loaded ${mapBounds.length} soil samples and simulated stations.`;
+
+          window.setTimeout(() => {
+            mapMessage.classList.add("hidden");
+          }, 3000);
+
+        } else {
+          mapMessage.textContent =
+            "No valid locations were found in the CSV.";
+        }
+
+        console.log(
+          `Loaded ${mapBounds.length} soil samples and simulated stations.`
+        );
+      })
+
+      .catch(error => {
+        console.error("Map data error:", error);
+        mapMessage.textContent =
+          "Could not load soil_thickness.csv. Check the browser console.";
+      });
+
+    // ==================================================
+    // 8. BRIDGE USED BY riskApi.js
+    // Each Analyze Risk run: new readings for every station ->
+    // one request to Python -> markers and popups show the result.
+    // ==================================================
+
+    function refreshAllReadings() {
+      sensorStations.forEach(station => {
+        station.features = generateSensorReadings(station.recordedSoilThickness);
+        station.readings = generateDisplayReadings();
+        station.updatedAt = new Date();
+      });
+    }
+
+    // [{ id, ...12 readings }, ...] for every station on the map
+    function getStationPayload() {
+      return sensorStations.map(station => ({
+        id: station.id,
+        ...station.features
+      }));
+    }
+
+    // results: [{ id, risk }, ...] returned by Python
+    function applyRiskResults(results) {
+      const byId = new Map(results.map(r => [r.id, r.risk]));
+      let applied = 0;
+
+      sensorStations.forEach(station => {
+        if (!byId.has(station.id)) return;
+
+        station.risk = byId.get(station.id);
+        station.marker.setIcon(createSensorIcon(station));
+        station.marker.setPopupContent(sensorPopupHTML(station));
+        applied++;
+      });
+
+      if (applied > 0) {
+        document.getElementById("legendThickness").classList.add("hidden");
+        document.getElementById("legendRisk").classList.remove("hidden");
+        document.getElementById("legendNote").textContent =
+          "Marker colour shows the risk predicted by the Python model " +
+          "from simulated sensor readings. It is a demonstration, not a " +
+          "validated hazard assessment.";
+      }
+
+      return applied;
+    }
+
+    window.SlopeGuard = {
+      stations: sensorStations,
+      ready: stationsReady,
+      refreshAllReadings,
+      getStationPayload,
+      applyRiskResults
+    };
+
+    // ==================================================
+    // 9. LAYER CONTROL
+    // ==================================================
+
+    L.control.layers(
+      null,
+      {
+        "Soil samples + simulated stations": monitoringLayer
+      },
+      {
+        collapsed: true
+      }
+    ).addTo(map);
+
+  </script>
+  <script src="riskApi.js"></script>
+</body>
+</html>
